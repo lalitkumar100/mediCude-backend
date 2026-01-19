@@ -1,0 +1,27 @@
+add age and age trigger to employee to find age of 
+1 .table employee table go gpt
+2. update database
+3.add views in database for age
+
+
+🔐 Login Function Summary
+
+Purpose: Handles user login by verifying credentials and account status.
+
+Steps:
+Extracts email and password from the request body.
+Queries the database for a user with the given email from the logins table.
+
+Performs checks:
+If the user does not exist or the password is incorrect, responds with 401 Unauthorized.
+If the user account is 'Inactive', responds with 403 Forbidden and an appropriate message.
+If the user account is 'Suspended', responds with 403 Forbidden and an appropriate message.
+If all validations pass:
+Responds with a success message, a JWT token, and the user's last login time.
+
+⚠️ Issue Noted:
+it is recommended to use a hashing comparison method like bcrypt.compare(password, user.password_hash) instead, to ensure security.
+
+////////////////////////////////////////////////////////////////////////////////////////////////
+my last task is provide full delete to all softdelete wholesaler ,invoice , expiry , employee , sales bill
+//////////////////////////////////////////////////////////////////////////////////////////////////////////

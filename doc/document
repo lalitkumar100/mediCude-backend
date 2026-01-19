@@ -1,0 +1,61 @@
+Here's a brief explanation of the buildMedicineSearchQuery function based on the database structure and its purpose:
+
+📄 Functionality Overview: buildMedicineSearchQuery(params)
+This function dynamically builds a parameterized SQL query to search for medicines stored in a PostgreSQL database. It is designed to support:
+
+Multiple Filters
+Users can filter medicine records by:
+
+medicine_name, brand_name, batch_no
+
+invoice_id, invoice_no
+
+purchase_price, mrp
+
+payment_status, payment_date
+
+wholesaler_name
+
+✅ New: invoice_date_from and invoice_date_to for date-range filtering
+
+Joins Between Tables
+It uses SQL JOINs across three related tables:
+
+medicine_stock (medicine data)
+
+invoices (invoice and payment info)
+
+wholesalers (supplier/wholesaler details)
+
+Secure Query Building
+
+Uses parameterized queries ($1, $2, ...) to avoid SQL injection.
+
+Parameters are collected in a values[] array and returned with the query string.
+
+Pagination & Sorting Support
+
+Pagination using limit and offset values.
+
+Sorting with optional order_by (e.g., by medicine_name, expiry_date) and order_dir (ASC/DESC).
+
+Flexible Search
+
+Partial matching via ILIKE for case-insensitive search (%value%).
+
+Numerical and date filters via exact match or range (e.g., price, invoice_date_from/to).
+
+✅ Example Use Case:
+A user wants to search for Paracetamol from wholesaler "Medilife", between invoice dates 2024-01-01 and 2024-06-30, and sort by expiry date descending.
+
+The API would call:
+
+http
+Copy
+Edit
+GET /api/medicines?medicine_name=paracetamol&wholesaler_name=medilife&invoice_date_from=2024-01-01&invoice_date_to=2024-06-30&order_by=expiry_date&order_dir=DESC
+This builds and returns the correct SQL with values bound safely.
+
+/-----------------------------------------------------------------------------------------------/
+
+

@@ -1,0 +1,45 @@
+BEGIN;
+
+-- ===========================
+-- DROP VIEWS FIRST
+-- ===========================
+DROP VIEW IF EXISTS sales_with_profit;
+DROP VIEW IF EXISTS employee_with_age;
+
+-- ===========================
+-- DROP TRIGGERS
+-- ===========================
+DROP TRIGGER IF EXISTS trg_update_payment_date ON invoices;
+DROP TRIGGER IF EXISTS trg_sync_paid_amount ON invoices;
+DROP TRIGGER IF EXISTS trg_update_payment_status ON invoices;
+
+DROP TRIGGER IF EXISTS trg_update_wholesalers ON wholesalers;
+DROP TRIGGER IF EXISTS trg_update_invoices ON invoices;
+DROP TRIGGER IF EXISTS trg_update_medicine_stock ON medicine_stock;
+
+-- ===========================
+-- DROP FUNCTIONS
+-- ===========================
+DROP FUNCTION IF EXISTS update_payment_date_trigger CASCADE;
+DROP FUNCTION IF EXISTS sync_paid_amount_with_status CASCADE;
+DROP FUNCTION IF EXISTS update_payment_status_trigger CASCADE;
+DROP FUNCTION IF EXISTS update_timestamp CASCADE;
+
+-- ===========================
+-- DROP TABLES (in reverse dependency order)
+-- ===========================
+DROP TABLE IF EXISTS sale_items CASCADE;
+DROP TABLE IF EXISTS sales CASCADE;
+DROP TABLE IF EXISTS logins CASCADE;
+DROP TABLE IF EXISTS employees CASCADE;
+DROP TABLE IF EXISTS expiry_stock CASCADE;
+DROP TABLE IF EXISTS medicine_stock CASCADE;
+DROP TABLE IF EXISTS invoices CASCADE;
+DROP TABLE IF EXISTS wholesalers CASCADE;
+
+-- ===========================
+-- DROP ENUM TYPES
+-- ===========================
+DROP TYPE IF EXISTS payment_status_enum;
+
+COMMIT;

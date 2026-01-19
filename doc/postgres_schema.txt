@@ -1,0 +1,429 @@
+BEGIN;
+
+-- =========================================================
+-- STEP 1: Create ENUM if not exists
+-- =========================================================
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'payment_status_enum') THEN
+        CREATE TYPE payment_status_enum AS ENUM ('Paid', 'Unpaid', 'Partial');
+    END IF;
+END
+$$;
+
+-- =========================================================
+-- STEP 2: Create wholesalers table
+-- =========================================================
+CREATE TABLE IF NOT EXISTS wholesalers (
+    wholesaler_id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    gst_no VARCHAR(20) UNIQUE NOT NULL,
+    address TEXT,
+    contact VARCHAR(15),
+    email VARCHAR(100),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP DEFAULT NULL
+);
+
+-- =========================================================
+-- STEP 3: Create invoices table
+-- =========================================================
+CREATE TABLE IF NOT EXISTS invoices (
+    invoice_id SERIAL PRIMARY KEY,
+    invoice_no VARCHAR(20) UNIQUE NOT NULL,
+    invoice_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    total_amount NUMERIC(12,2) CHECK (total_amount >= 0) DEFAULT 0 NOT NULL,
+    paid_amount NUMERIC(12,2) CHECK (paid_amount >= 0) DEFAULT 0 NOT NULL,
+    payment_status payment_status_enum DEFAULT 'Unpaid' NOT NULL,
+    payment_date DATE,
+    wholesaler_id INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP DEFAULT NULL,
+    CONSTRAINT fk_wholesaler
+        FOREIGN KEY (wholesaler_id)
+        REFERENCES wholesalers(wholesaler_id)
+        ON DELETE RESTRICT
+);
+
+-- =========================================================
+-- STEP 4: Create medicine_stock table
+-- =========================================================
+CREATE TABLE IF NOT EXISTS medicine_stock (
+    medicine_id SERIAL PRIMARY KEY,
+    invoice_id INT NOT NULL,
+    medicine_name VARCHAR(100) NOT NULL,
+    brand_name VARCHAR(100),
+    stock_quantity INT CHECK (stock_quantity >= 0) DEFAULT 0,
+    mfg_date DATE,
+    expiry_date DATE,
+    purchase_price NUMERIC(10,2) CHECK (purchase_price >= 0) DEFAULT 0.00,
+    mrp NUMERIC(10,2) CHECK (mrp >= 0),
+    batch_no VARCHAR(20),
+    packed_type VARCHAR(50),
+    invoice_no VARCHAR(20) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_invoice_stock FOREIGN KEY (invoice_id)
+        REFERENCES invoices(invoice_id)
+        ON DELETE CASCADE,
+    CONSTRAINT chk_expiry_gt_mfg CHECK (
+        mfg_date IS NULL OR expiry_date IS NULL OR expiry_date > mfg_date
+    )
+);
+
+-- =========================================================
+-- STEP 4b: Create expiry_stock table
+-- =========================================================
+CREATE TABLE IF NOT EXISTS expiry_stock (
+    expiry_id SERIAL PRIMARY KEY,
+    invoice_id INT NOT NULL,
+    medicine_id INT NOT NULL,
+    medicine_name VARCHAR(100) NOT NULL,
+    brand_name VARCHAR(100),
+    stock_quantity INT CHECK (stock_quantity >= 0) DEFAULT 0,
+    mfg_date DATE,
+    expiry_date DATE,
+    purchase_price NUMERIC(10,2) CHECK (purchase_price >= 0) DEFAULT 0.00,
+    mrp NUMERIC(10,2) CHECK (mrp >= 0),
+    batch_no VARCHAR(20),
+    packed_type VARCHAR(50),
+    invoice_no VARCHAR(20) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_invoice_expiry FOREIGN KEY (invoice_id)
+        REFERENCES invoices(invoice_id)
+        ON DELETE CASCADE,
+    CONSTRAINT chk_expiry_gt_mfg_es CHECK (
+        mfg_date IS NULL OR expiry_date IS NULL OR expiry_date > mfg_date
+    )
+);
+
+-- =========================================================
+-- Trigger Functions
+-- =========================================================
+
+-- Update payment_date when paid_amount changes
+CREATE OR REPLACE FUNCTION update_payment_date_trigger()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.paid_amount = 0 THEN
+    NEW.payment_date := NULL;
+  ELSIF NEW.paid_amount IS DISTINCT FROM OLD.paid_amount THEN
+    NEW.payment_date := CURRENT_DATE;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Auto-update updated_at timestamp
+CREATE OR REPLACE FUNCTION update_timestamp()
+RETURNS TRIGGER AS $$
+BEGIN
+   NEW.updated_at = CURRENT_TIMESTAMP;
+   RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Update payment_status based on paid_amount vs total_amount
+CREATE OR REPLACE FUNCTION update_payment_status_trigger()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.paid_amount IS NULL OR NEW.paid_amount = 0 THEN
+    NEW.payment_status := 'Unpaid';
+  ELSIF NEW.paid_amount >= NEW.total_amount THEN
+    NEW.payment_status := 'Paid';
+  ELSIF NEW.paid_amount > 0 AND NEW.paid_amount < NEW.total_amount THEN
+    NEW.payment_status := 'Partial';
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- If status is set to Paid, sync paid_amount to total_amount
+CREATE OR REPLACE FUNCTION sync_paid_amount_with_status()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.payment_status = 'Paid' THEN
+    NEW.paid_amount := NEW.total_amount;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- =========================================================
+-- Triggers (drop if exist first)
+-- =========================================================
+
+-- invoices triggers
+DROP TRIGGER IF EXISTS trg_update_payment_date ON invoices;
+CREATE TRIGGER trg_update_payment_date
+BEFORE UPDATE ON invoices
+FOR EACH ROW
+EXECUTE FUNCTION update_payment_date_trigger();
+
+DROP TRIGGER IF EXISTS trg_sync_paid_amount ON invoices;
+CREATE TRIGGER trg_sync_paid_amount
+BEFORE INSERT OR UPDATE ON invoices
+FOR EACH ROW
+EXECUTE FUNCTION sync_paid_amount_with_status();
+
+DROP TRIGGER IF EXISTS trg_update_payment_status ON invoices;
+CREATE TRIGGER trg_update_payment_status
+BEFORE INSERT OR UPDATE ON invoices
+FOR EACH ROW
+EXECUTE FUNCTION update_payment_status_trigger();
+
+-- updated_at triggers
+DROP TRIGGER IF EXISTS trg_update_wholesalers ON wholesalers;
+CREATE TRIGGER trg_update_wholesalers
+BEFORE UPDATE ON wholesalers
+FOR EACH ROW
+EXECUTE FUNCTION update_timestamp();
+
+DROP TRIGGER IF EXISTS trg_update_invoices ON invoices;
+CREATE TRIGGER trg_update_invoices
+BEFORE UPDATE ON invoices
+FOR EACH ROW
+EXECUTE FUNCTION update_timestamp();
+
+DROP TRIGGER IF EXISTS trg_update_medicine_stock ON medicine_stock;
+CREATE TRIGGER trg_update_medicine_stock
+BEFORE UPDATE ON medicine_stock
+FOR EACH ROW
+EXECUTE FUNCTION update_timestamp();
+
+-- =========================================================
+-- DATA INSERTS
+-- =========================================================
+
+-- Wholesalers
+INSERT INTO wholesalers (name, gst_no, address, contact, email) VALUES
+  ('HealthMart Pharma', '27HMP1234A1Z5', '12 Sector Road, Mumbai, MH - 400001', '9876543210', 'contact@healthmartpharma.com'),
+  ('Lifeline Distributors', '07LLD5678B2Z7', 'A-23 Connaught Place, Delhi - 110001', '9812345678', 'sales@lifelinedistributors.in'),
+  ('CureMed Pharma', '19CMP8765C3Z2', '56 Salt Lake Sector 3, Kolkata - 700091', '9123456780', 'info@curemedpharma.com')
+ON CONFLICT (gst_no) DO NOTHING;
+
+-- Invoices
+INSERT INTO invoices (invoice_no, total_amount, payment_status, payment_date, wholesaler_id) VALUES
+  ('HMP-001', 8550.00, 'Unpaid', NULL, 1),
+  ('HMP-002', 10300.00, 'Unpaid', NULL, 1),
+  ('LLD-001', 7320.00, 'Unpaid', NULL, 2),
+  ('CMP-001', 8760.00, 'Unpaid', NULL, 3)
+ON CONFLICT (invoice_no) DO NOTHING;
+
+-- Medicine Stock
+INSERT INTO medicine_stock (invoice_id, medicine_name, brand_name, stock_quantity, mfg_date, expiry_date, purchase_price, mrp, batch_no, packed_type, invoice_no) VALUES
+  (1, 'Paracetamol', 'Crocin', 100, '2024-05-01', '2026-05-01', 12.00, 20.00, 'PC123A', 'Strip', 'HMP-001'),
+  (1, 'Amoxicillin', 'Mox 500', 50, '2024-08-01', '2026-08-01', 45.00, 70.00, 'AM456B', 'Strip', 'HMP-001'),
+  (1, 'Cetirizine', 'Cetzine', 200, '2023-11-01', '2025-11-01', 6.00, 10.00, 'CZ789C', 'Strip', 'HMP-001'),
+  (1, 'Ibuprofen', 'Brufen', 150, '2024-04-01', '2026-04-01', 18.00, 30.00, 'IB321D', 'Strip', 'HMP-001'),
+  (1, 'Omeprazole', 'Omez', 120, '2024-06-01', '2026-06-01', 10.00, 18.00, 'OM654E', 'Strip', 'HMP-001'),
+
+  (2, 'Azithromycin', 'Azithral', 60, '2024-03-01', '2026-03-01', 28.00, 45.00, 'AZ001B', 'Strip', 'HMP-002'),
+  (2, 'Dolo 650', 'Dolo', 200, '2024-01-01', '2026-01-01', 16.00, 25.00, 'DL650C', 'Strip', 'HMP-002'),
+  (2, 'Rabeprazole', 'Razo', 100, '2024-02-01', '2026-02-01', 20.00, 35.00, 'RP100D', 'Strip', 'HMP-002'),
+  (2, 'Losartan', 'Losar', 90, '2023-12-01', '2025-12-01', 18.00, 28.00, 'LS789E', 'Strip', 'HMP-002'),
+  (2, 'Metronidazole', 'Flagyl', 150, '2024-05-01', '2026-05-01', 12.00, 22.00, 'FG456F', 'Strip', 'HMP-002'),
+
+  (3, 'Metformin', 'Glycomet', 80, '2024-06-01', '2026-01-01', 22.00, 35.00, 'MF234F', 'Strip', 'LLD-001'),
+  (3, 'Atorvastatin', 'Lipicure', 60, '2024-01-01', '2026-07-01', 28.00, 50.00, 'AT345G', 'Strip', 'LLD-001'),
+  (3, 'Levocetirizine', 'Levocet', 90, '2024-04-01', '2025-12-01', 8.00, 12.00, 'LV456H', 'Strip', 'LLD-001'),
+  (3, 'Diclofenac', 'Voveran', 100, '2024-03-01', '2026-03-01', 14.00, 25.00, 'DC567I', 'Strip', 'LLD-001'),
+  (3, 'Pantoprazole', 'Pantocid', 110, '2024-02-01', '2026-06-01', 16.00, 28.00, 'PT678J', 'Strip', 'LLD-001'),
+
+  (4, 'Esomeprazole', 'Nexpro', 70, '2024-05-01', '2026-05-01', 34.00, 55.00, 'ES123F', 'Strip', 'CMP-001'),
+  (4, 'Rosuvastatin', 'Crestor', 55, '2024-01-01', '2026-01-01', 48.00, 75.00, 'RS234G', 'Strip', 'CMP-001'),
+  (4, 'Lisinopril', 'Zestril', 65, '2023-11-01', '2025-11-01', 20.00, 32.00, 'LS345H', 'Strip', 'CMP-001'),
+  (4, 'Fluconazole', 'Forcan', 90, '2024-03-01', '2026-03-01', 16.00, 27.00, 'FC456I', 'Strip', 'CMP-001'),
+  (4, 'Loratadine', 'Claritin', 100, '2024-02-01', '2026-02-01', 10.00, 18.00, 'LR567J', 'Strip', 'CMP-001');
+
+-- =========================================================
+-- employees
+-- =========================================================
+CREATE TABLE IF NOT EXISTS employees (
+    employee_id SERIAL PRIMARY KEY,
+    first_name VARCHAR(10) NOT NULL,
+    last_name VARCHAR(10),
+    gender VARCHAR(10) CHECK (gender IN ('Male', 'Female', 'Other')),
+    date_of_birth DATE,
+    contact_number VARCHAR(15),
+    email VARCHAR(100) UNIQUE,
+    address TEXT,
+    
+    -- Newly added fields
+    aadhar_card_no VARCHAR(12) UNIQUE,
+    pan_card_no VARCHAR(10) UNIQUE,
+    account_no VARCHAR(20) UNIQUE,
+    profile_photo TEXT, -- can store a URL or path to the photo file
+
+    role VARCHAR(20) NOT NULL CHECK (role IN ('admin', 'manager', 'worker')),
+    date_of_joining DATE DEFAULT CURRENT_DATE,
+    salary NUMERIC(10, 2) CHECK (salary >= 0) DEFAULT 5000,
+    status VARCHAR(20) DEFAULT 'Active' CHECK (status IN ('Active', 'Inactive', 'Suspended')),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+
+
+-- =========================================================
+-- logins
+-- =========================================================
+CREATE TABLE IF NOT EXISTS logins (
+    login_id SERIAL PRIMARY KEY,
+    employee_id INT NOT NULL UNIQUE REFERENCES employees(employee_id) ON DELETE CASCADE,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    password_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_login TIMESTAMP,
+    status VARCHAR(20) DEFAULT 'Active' CHECK (status IN ('Active', 'Inactive', 'Suspended')), 
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- =========================================================
+-- VIEW: employee_with_age
+-- =========================================================
+CREATE OR REPLACE VIEW employee_with_age AS
+SELECT
+    *,
+    DATE_PART('year', AGE(CURRENT_DATE, date_of_birth)) AS age
+FROM employees;
+
+-- =========================================================
+-- sales & sale_items
+-- =========================================================
+CREATE TABLE IF NOT EXISTS sales (
+  sale_id SERIAL PRIMARY KEY,
+  employee_id INT NOT NULL REFERENCES employees(employee_id) ON DELETE CASCADE,
+  sale_no VARCHAR(50) UNIQUE NOT NULL, -- e.g. SAL/2025/0001
+  sale_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+  purchase_price NUMERIC(10,2) CHECK (purchase_price >= 0) DEFAULT 0.00,
+  total_amount NUMERIC(10, 2) NOT NULL,
+  mrp_amount NUMERIC(10, 2),
+
+  payment_method VARCHAR(50) NOT NULL CHECK (payment_method IN ('Cash', 'UPI', 'Credit')),
+  customer_name VARCHAR(100),
+  contact_number VARCHAR(15),
+
+  created_by INTEGER REFERENCES employees(employee_id) ON DELETE SET NULL,
+  deleted_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS sale_items (
+  item_id SERIAL PRIMARY KEY,
+
+  sale_id INTEGER NOT NULL REFERENCES sales(sale_id) ON DELETE CASCADE,
+  medicine_id INTEGER NOT NULL REFERENCES medicine_stock(medicine_id) ON DELETE RESTRICT,
+
+  medicine_name VARCHAR(100) NOT NULL,
+  batch_no VARCHAR(50),
+  expiry_date DATE,
+  purchase_price NUMERIC(10,2) CHECK (purchase_price >= 0) DEFAULT 0.00,
+  mrp NUMERIC(10,2) CHECK (mrp >= 0),
+
+  quantity INTEGER NOT NULL CHECK (quantity > 0),
+  rate NUMERIC(10, 2) NOT NULL,
+  total NUMERIC(10, 2) GENERATED ALWAYS AS (rate * quantity) STORED,
+
+  UNIQUE (sale_id, medicine_id)
+);
+
+-- =========================================================
+-- VIEW: sales_with_profit (fixed)
+-- =========================================================
+CREATE OR REPLACE VIEW sales_with_profit AS
+SELECT 
+    s.sale_id,
+    s.sale_date,
+    si.medicine_id,
+    m.medicine_name,
+    si.quantity,
+    si.total AS total_amount,
+    m.purchase_price,
+    (si.total - (m.purchase_price * si.quantity)) AS profit
+FROM sales s
+JOIN sale_items si ON s.sale_id = si.sale_id
+JOIN medicine_stock m ON si.medicine_id = m.medicine_id;
+
+COMMIT;
+
+ALTER TABLE sales ALTER COLUMN sale_no TYPE VARCHAR(50);
+
+CREATE OR REPLACE VIEW view_sales_summary AS
+SELECT
+    s.sale_id,
+    s.sale_no,
+    s.sale_date,
+    e.first_name || ' ' || COALESCE(e.last_name, '') AS employee_name,
+    s.payment_method,
+    s.total_amount,
+    s.total_amount - s.purchase_price AS profit
+FROM
+    sales s
+JOIN
+    employees e ON s.employee_id = e.employee_id
+WHERE
+    s.deleted_at IS NULL;
+
+CREATE OR REPLACE VIEW view_sales_summary_with_items AS
+SELECT
+  s.sale_id,
+  s.sale_no,
+  s.sale_date,
+  s.customer_name,
+  s.contact_number,
+  e.first_name || ' ' || COALESCE(e.last_name, '') AS employee_name,
+  s.payment_method,
+  s.total_amount,
+  (s.total_amount - s.purchase_price) AS profit,
+
+  json_agg(
+    json_build_object(
+      'medicine_name', si.medicine_name,
+      'rate', si.rate,
+      'expiry_date', si.expiry_date,
+      'quantity', si.quantity,
+      'purchase_price', si.purchase_price
+    )
+  ) AS sale_items
+
+FROM sales s
+JOIN employees e ON s.employee_id = e.employee_id
+JOIN sale_items si ON s.sale_id = si.sale_id
+
+GROUP BY
+  s.sale_id, s.sale_no, s.sale_date, e.first_name, e.last_name,
+  s.payment_method, s.total_amount, s.purchase_price;
+
+
+CREATE OR REPLACE VIEW view_medicine_stock_with_wholesaler AS
+SELECT
+    ms.medicine_id,
+    ms.medicine_name,
+    ms.brand_name,
+    ms.stock_quantity,
+    ms.mfg_date,
+    ms.expiry_date,
+    ms.purchase_price,
+    ms.mrp,
+    ms.batch_no,
+    ms.packed_type,
+    ms.invoice_no,
+    ms.created_at,
+    w.name AS wholesaler_name
+FROM
+    medicine_stock ms
+JOIN
+    invoices i ON ms.invoice_id = i.invoice_id
+JOIN
+    wholesalers w ON i.wholesaler_id = w.wholesaler_id
+WHERE
+    ms.stock_quantity > 0 AND ms.expiry_date IS NULL OR ms.expiry_date > CURRENT_DATE;
+
+
