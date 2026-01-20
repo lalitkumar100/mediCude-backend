@@ -55,9 +55,3 @@ build/
 # =========================
 .DS_Store
 Thumbs.db
-
-# =========================
-# Optional (Uploads / Temp)
-# =========================
-uploads/
-tmp/

@@ -7,9 +7,9 @@ const pool = new Pool({
   password: process.env.PG_PASSWORD,
   database: process.env.PG_DATABASE,
   port: Number(process.env.PG_PORT),
-  // ssl: {
-  //   rejectUnauthorized: false, // REQUIRED for Render
-  // },
+  ssl: {
+    rejectUnauthorized: false, // REQUIRED for Render
+  },
 });
 
 pool.connect()

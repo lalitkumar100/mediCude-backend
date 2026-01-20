@@ -8,7 +8,7 @@ const morgan = require('morgan');
 app.use(cors());
 
 
-app.use(morgan('combined'));
+// app.use(morgan('combined'));
 
 
 
@@ -23,7 +23,7 @@ const PORT = 4000;
 
 app.use(express.json()); 
 app.use(express.urlencoded({ extended: true })); 
-app.use(morgan('dev')); 
+// app.use(morgan('proc')); 
 
 
 app.use('/admin',authMiddleware, adminRouter);
