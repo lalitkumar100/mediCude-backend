@@ -54,7 +54,7 @@ medicude-backend/
 
 1. **Clone the repository:**
 ```bash
-git clone <YOUR_REPO_URL>
+git clone https://github.com/lalitkumar100/mediCude-backend
 cd medicude-backend
 
 ```
