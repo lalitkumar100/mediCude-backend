@@ -1,4 +1,6 @@
 <img width="277" height="325" alt="Screenshot 2026-01-04 200018" src="https://github.com/user-attachments/assets/d84e0a77-2f1a-4a1b-94ba-5abd35787ba6" />
+
+
 #  Medicude: AI-Powered Pharmacy Management System
 
 
