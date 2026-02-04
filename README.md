@@ -1,10 +1,6 @@
-Since you are building **Medicude** as an AI-powered pharmacy management system with a focus on stock automation and financial tracking, the README needs to reflect its professional, enterprise-grade utility.
+<img width="277" height="325" alt="Screenshot 2026-01-04 200018" src="https://github.com/user-attachments/assets/d84e0a77-2f1a-4a1b-94ba-5abd35787ba6" />
+#  Medicude: AI-Powered Pharmacy Management System
 
-Here is the complete **Medicude** README, structured to highlight your backend logic and AI integration.
-
----
-
-# 🏥 Medicude: AI-Powered Pharmacy Management System
 
 **Medicude** is a sophisticated full-stack solution designed to modernize pharmacy operations. By integrating AI-driven automation for stock management and financial tracking, it reduces manual data entry and provides real-time business insights for pharmacy owners.
 
