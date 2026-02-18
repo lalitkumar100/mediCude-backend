@@ -9,7 +9,7 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 // --- CONFIGURATION ---
 const apiKey = process.env.GEMINI_API_KEY;
-const modelId = "gemini-2.5-flash-preview-09-2025"; // Main model for chat
+const modelId = process.env.GEMINI_MODEL; // Main model for chat
 const genAI = new GoogleGenerativeAI(apiKey);
 
 let SYSTEM_PROMPT = "";
