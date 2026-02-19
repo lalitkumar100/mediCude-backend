@@ -83,7 +83,7 @@ const processInvoice = async (req, res, next) => {
     try {
         // 2. Model Selection: Gemini 1.5 Flash is efficient for documents
         const model = genAI.getGenerativeModel({
-            model: "gemini-2.5-flash-preview-09-2025", 
+            model: process.env.GEMINI_MODEL || "gemini-2.5-flash", 
         });
 
         const prompt = `
