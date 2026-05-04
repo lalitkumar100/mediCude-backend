@@ -70,10 +70,31 @@ npm install
 3. **Configure Environment Variables:**
 Create a `.env` file in the root directory:
 ```env
+
+# Use connection string only
+
+PG_HOST=dpg-d5msivcmrvns73fc97q0-a.singapore-postgres.render.com
+PG_USER=t
+PG_PASSWORD=6neSRXaoiwv9AHpCzpjv4vKoXUfXPb1S
+PG_DATABASE=medicude
+PG_PORT=5432
+
+# PG_HOST=localhost
+# PG_USER=postgres
+# PG_PASSWORD=a
+# PG_DATABASE=postgres
+# PG_PORT=5432
+
+NODE_ENV=production
 PORT=5000
-MONGO_URI=your_mongodb_connection_string
-JWT_SECRET=your_secret_key
-AI_API_KEY=your_ai_key
+JWT_SECRET=JAIBWFADSVTIAPOALBWBOB
+# .env file
+SECRET_ROUTE_KEY=JAMJLFAZPVALBWBOB
+GEMINI_API_KEY=AIzaSyDKYJh5-Xp44His92XhCGsJbMMU9rT7Cxw
+
+
+
+
 
 ```
 
